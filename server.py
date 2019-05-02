@@ -38,7 +38,7 @@ def log(s):
         if DEBUG:
             print(s)
 
-def configureBox():
+def configureBox(action):
     message =""
     pattern = re.compile(r'\{(.*?)\}')
     try:
@@ -104,7 +104,7 @@ def configureBox():
 
 		#8 Si c'est une configuration faire le if, si c'est juste un ajoute
 		#  de smartphone alors éviter.
-		if("configuration" in data) :
+		if("FirstConfig" in action) :
 			#   Configure WIFI
 
 	        	#   Configure PIVPN IP static 
