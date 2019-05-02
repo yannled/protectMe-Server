@@ -19,10 +19,6 @@ DEBUG = False
 if(len(sys.argv[1:])>=1 and sys.argv[1]=="debug"):
 	DEBUG = True
 
-def log(s):
-        if DEBUG:
-                print(s)
-
 #definition of the socket
 server_sock=BluetoothSocket( RFCOMM )
 server_sock.bind(("",PORT_ANY))
@@ -38,56 +34,56 @@ advertise_service( server_sock, "SampleServer",
                	 profiles = [ SERIAL_PORT_PROFILE ] 
                	)
 
-log("Waiting for connection on RFCOMM channel : " + str(port))
+def log(s):
+        if DEBUG:
+            print(s)
 
-client_sock, client_info = server_sock.accept()
-log("Accepted connection from " + str(client_info))
+def configureBox():
+    message =""
+    pattern = re.compile(r'\{(.*?)\}')
+    try:
+        while True:
+            data = client_sock.recv(1024)
+            if len(data) == 0: break
+            message = message + data
+        log("received [" +  str(data)+"]")
 
-message =""
-pattern = re.compile(r'\{(.*?)\}')
-try:
-    while True:
-        data = client_sock.recv(1024)
-        if len(data) == 0: break
-    	message = message + data
-	log("received [" +  str(data)+"]")
+        if("endCryptoExchange" in data) :
+            	#1. split receive PublicKey, P and G (format : OpenSSLDHPublicKey{Y=...,P=...,G=...})
 
-	if("endCryptoExchange" in data) :
-                #1. split receive PublicKey, P and G (format : OpenSSLDHPublicKey{Y=...,P=...,G=...})
-
-                #   Get params in {}
+            	#   Get params in {}
 		receiveParams = pattern.findall(message)
 
-                #   Get params in table
+		#   Get params in table
             	params = receiveParams[0].split(',')
 
             	#   Extract Receive Public key
-            	receiveKey = int(params[0][2:],10)
+                receiveKey = int(params[0][2:],10)
 		log("Receive publicKey : " + str(receiveKey))
-            	#   Exctract P and G
-            	p = int(params[1][2:],10)
-            	g = int(params[2][2:],10)
+                #   Exctract P and G
+                p = int(params[1][2:],10)
+                g = int(params[2][2:],10)
 		log("g : " + str(g) + " p : " + str(p))
 
-            	#2. Generate privateKey (Greater than 2 less than P)
-            	privateKey =  rand_gen.randint(2,p-g)
+                #2. Generate privateKey (Greater than 2 less than P)
+                privateKey =  rand_gen.randint(2,p-g)
 		log("private Key : " + str(privateKey))
 
-            	#3. Generate New Public key (pubKey = g**privateKey mod p)
-            	publicKey = pow(g, privateKey, (p))
+                #3. Generate New Public key (pubKey = g**privateKey mod p)
+                publicKey = pow(g, privateKey, (p))
 		log("PublicKey : " + str(publicKey))
 		log("PublicKey < p ?  :" + str(publicKey < p) )
 
-            	#4. Generate Shared Key (key = receivePubKey**privateKey mod p)
+                #4. Generate Shared Key (key = receivePubKey**privateKey mod p)
                 sharedKeyInt = pow(receiveKey, privateKey, p)
 		log("sharedKeyInt : " + str(sharedKeyInt))
 		#   Convert it to Bytes
 		sharedKeyBytes = long_to_bytes(sharedKeyInt)
 		#   Reduce key as 16 Bytes
-            	sharedKey =  sharedKeyBytes[:16]
+                sharedKey =  sharedKeyBytes[:16]
 		log("my key : " + sharedKey + " length : " + str(len(sharedKey)))
 		print(sharedKey)
-            	#5. Send public Key
+                #5. Send public Key
 		client_sock.sendall(str(len(str(publicKey))))
 		client_sock.sendall(str(publicKey))
 
@@ -106,11 +102,14 @@ try:
 		plaintext = encryption_suite.decrypt(data[16:])
 		print("plaintext : " + plaintext)
 
-                #8. Configure WIFI
+		#8 Si c'est une configuration faire le if, si c'est juste un ajoute
+		#  de smartphone alors éviter.
+		if("configuration" in data) :
+			#   Configure WIFI
 
-                #9. Configure PIVPN IP static 
+	        	#   Configure PIVPN IP static 
 
-                #10.Create OpenVpn Profile
+	        	#   Create OpenVpn Profile
 
 		#8. send openVpn profile (.ovpn file)
 		PATH = "/home/pi/ovpns/"
@@ -137,11 +136,24 @@ try:
                 client_sock.sendall(ovpnFile)
 
 
-except IOError:
-    pass
+    except IOError:
+        pass
 
-print "disconnected"
+    print "disconnected"
 
-client_sock.close()
-server_sock.close()
-print "all done"
+    client_sock.close()
+    server_sock.close()
+    print "all done"
+
+
+def main():
+	while(true)
+		log("Waiting for connection on RFCOMM channel : " + str(port))
+
+		client_sock, client_info = server_sock.accept()
+		log("Accepted connection from " + str(client_info))
+
+		actionChoice = ""
+		data = client_sock.recv(1024)
+
+		configureBox(data)
