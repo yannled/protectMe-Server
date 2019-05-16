@@ -3,15 +3,19 @@
 # $Id: rfcomm-server.py 518 2007-08-10 07:20:07Z albert $
 
 from bluetooth import *
+import time
 import base64
 import re
 import random
+import subprocess
 import sys
 import os
 from Crypto.Cipher import AES
+from datetime import datetime
 rand_gen = random.SystemRandom()
 from Crypto import Random
 from struct import *
+import netifaces as ni
 from Crypto.Util.number import long_to_bytes
 
 #debug mode to show more information of running script
@@ -38,17 +42,87 @@ def log(s):
         if DEBUG:
             print(s)
 
-def configureBox(action):
+
+def configureWifi(ssid, password):
+	try:
+		os.system("ifconfig wlan0 down")
+		time.sleep(2)
+	except:
+		log("error during stop wifi")
+
+	arrayOfLine = []
+	filename = "/etc/wpa_supplicant/wpa_supplicant.conf"
+	with open(filename, "r") as oldFile:
+		for line in oldFile:
+			arrayOfLine.append(line)
+	os.remove(filename)
+
+	counter = 0
+    	with open(filename, "a+") as wpa_supplicant:
+		while(counter<3):
+			wpa_supplicant.write(arrayOfLine[counter])
+			counter+=1
+		wpa_supplicant.write("network={\n\tssid=\""+ssid+"\"\n\tpsk=\"" + password + "\"\n\tkey_mgmt=WPA-PSK\n}")
+
+	try:
+		os.system("ifconfig wlan0 up")
+		time.sleep(2)
+		os.system("sudo wpa_cli -i wlan0 reconfigure")
+		time.sleep(2)
+	except:
+		log("error during start wifi")
+
+
+def deleteStaticIP():
+	filename = "/etc/dhcpcd.conf"
+        with open(filename,"r") as infile:
+	        lines = infile.readlines()
+
+        position = -100
+        with open(filename,"w") as outfile:
+                for pos, line in enumerate(lines):
+                        if "interface wlan0" in line:
+                                print(line)
+                                position = pos
+                        if pos == position+1 :
+                                continue
+                        if pos == position+2 :
+                                continue
+                        if pos == position+3  :
+                                continue
+                        if "interface wlan0" not in line:
+                                outfile.write(line)
+
+
+def configureStaticIP(adresseIP,routerIP):
+	filename = "/etc/dhcpcd.conf"
+
+	with open(filename,"a") as dhcpd:
+		dhcpd.write("interface wlan0\n\tstatic ip_address="+adresseIP+"\n\tstatic routers="+routerIP+"\n\tstatic domain_name_servers="+routerIP+"\n")
+
+
+def addPiVpnProfile(profileName, profilePass):
+	log(profileName)
+	addProfileVPN = "pivpn -a -n "+profileName+" -p "+profilePass
+        process = subprocess.Popen(addProfileVPN, stdout=subprocess.PIPE, shell=True)
+        (output, error) = process.communicate()
+        p_status = process.wait()
+	log("Command output: " + output)
+	if error is not None:
+		log("Command error: " + error)
+
+def configureBox(client_sock):
     message =""
     pattern = re.compile(r'\{(.*?)\}')
     try:
         while True:
             data = client_sock.recv(1024)
-            if len(data) == 0: break
             message = message + data
-        log("received [" +  str(data)+"]")
+       	    log("received [" +  str(data)+"]")
+	    if("endCryptoExchange" in data) : break
 
         if("endCryptoExchange" in data) :
+		print "begincrypto"
             	#1. split receive PublicKey, P and G (format : OpenSSLDHPublicKey{Y=...,P=...,G=...})
 
             	#   Get params in {}
@@ -87,7 +161,7 @@ def configureBox(action):
 		client_sock.sendall(str(len(str(publicKey))))
 		client_sock.sendall(str(publicKey))
 
-                #6. Receive CypherText
+                #6. Receive CypherText Wifi name then wifi password
 		data = client_sock.recv(1024)
 		log("cyphertext in base64 : " + data)
 		#   Decode cyphertext
@@ -100,40 +174,59 @@ def configureBox(action):
 		#7. Decrypt
 		encryption_suite = AES.new(sharedKey, AES.MODE_CBC,iv)
 		plaintext = encryption_suite.decrypt(data[16:])
-		print("plaintext : " + plaintext)
+		print("Wifi name then wifi password : " + plaintext)
 
+		wifiParams = pattern.findall(plaintext)
+		wifiName = wifiParams[0]
+		wifiPass = wifiParams[1]
 		#8 Si c'est une configuration faire le if, si c'est juste un ajoute
-		#  de smartphone alors éviter.
-		if("FirstConfig" in action) :
-			#   Configure WIFI
-
+		#  de smartphone alors eviter.
+		if("FirstConfig" in message) :
+			log("First configuration")
+			#   Configure WIFI and PIVPN ip static
+			configureWifi(wifiName,wifiPass)
+			deleteStaticIP()
+			time.sleep(15)
 	        	#   Configure PIVPN IP static 
+			ni.ifaddresses("wlan0")
+        		adresseIP = ni.ifaddresses("wlan0")[ni.AF_INET][0]['addr']
+        		splitIP = adresseIP.split(".")
+        		routerIp = splitIP[0]+"."+ splitIP[1]+"."+ splitIP[2] +"."+"1"
 
-	        	#   Create OpenVpn Profile
+			configureStaticIP(adresseIP,routerIp)
+	        #9.  Create OpenVpn Profile
+		now = datetime.now()
+        	profileName = wifiName+str(now)
+		# TODO FAIRE FONCTION AVEC TOUS CARAC FORMATAGE
+        	profileName = profileName.replace(" ","-")
+		profileName = profileName.replace("_","-")
+		profileName = profileName.replace(".","-")
+		profileName = profileName.replace(":","-")
 
-		#8. send openVpn profile (.ovpn file)
+		addPiVpnProfile(profileName, wifiPass)
+
+		#10. send openVpn profile (.ovpn file)
 		PATH = "/home/pi/ovpns/"
-		ovpnFile = open(PATH+"test.ovpn","r").read()
+		profileName = "test"+".ovpn"
+		ovpnFile = open(PATH+profileName,"r").read()
 		print(ovpnFile)
-		#ipv4 = str(os.popen('ip addr show wlan0').read().split("inet ")[1].split("/")[0])
-		#log(ipv4)
 
 		#   Send
-		#pad = lambda s: s + (16 - len(s) % 16) * chr(16 - len(s) % 16)
-		#ovpnFile = pad(ovpnFile)
-                #cipher = AES.new(sharedKey, AES.MODE_CBC, iv)
-		#cipherText = base64.b64encode(iv + cipher.encrypt(ovpnFile))
-		#client_sock.sendall(str(len(str(cipherText))))
-		#client_sock.sendall(cipherText)
-		print(str(ovpnFile))
-		print(len(ovpnFile))
-		print(str(len(ovpnFile)))
-		#send length
-		client_sock.sendall(str(len(str(ovpnFile))))
-		# receive acquitement
+		pad = lambda s: s + (16 - len(s) % 16) * chr(16 - len(s) % 16)
+		ovpnFile = pad(ovpnFile)
+                cipher = AES.new(sharedKey, AES.MODE_CBC, iv)
+		cipherText = base64.b64encode(iv + cipher.encrypt(ovpnFile))
+		client_sock.sendall(str(len(str(cipherText))))
 		data = client_sock.recv(1024)
+		client_sock.sendall(cipherText)
+		
+		#send length
+		#print(str(len(str(ovpnFile))))
+		#client_sock.sendall(str(len(str(ovpnFile))))
+		# receive acquitement
+		#data = client_sock.recv(1024)
 		# send Data
-                client_sock.sendall(ovpnFile)
+                #client_sock.sendall(ovpnFile)
 
 
     except IOError:
@@ -147,13 +240,32 @@ def configureBox(action):
 
 
 def main():
-	while(true)
+	while(True):
 		log("Waiting for connection on RFCOMM channel : " + str(port))
-
 		client_sock, client_info = server_sock.accept()
+
 		log("Accepted connection from " + str(client_info))
 
-		actionChoice = ""
-		data = client_sock.recv(1024)
+		#actionChoice = ""
+		#data = client_sock.recv(1024)
 
-		configureBox(data)
+		configureBox(client_sock)
+
+if __name__ == "__main__":
+	#configureWifi("wifideTest", "123456eartzui")
+	#configureStaticIP("10.0.0.34","10.0.0.1")
+        #ni.ifaddresses("wlan0")
+        #adresseIP = ni.ifaddresses("wlan0")[ni.AF_INET][0]['addr']
+	#print(adresseIP)
+	#splitIP = adresseIP.split(".")
+	#routerIp = splitIP[0]+"."+ splitIP[1]+"."+ splitIP[2] +"."+"1"
+	#print(routerIp)
+	#ProfileName = "bounboubnboub"
+	#password = "zolozo"
+	#addProfileVPN = "pivpn -a -n "+ProfileName+" -p "+password
+	#process = subprocess.Popen(addProfileVPN, stdout=subprocess.PIPE, shell=True)
+	#(output, error) = process.communicate()
+	#p_status = process.wait()
+	#print("Command output: " + output)
+	main()
+
