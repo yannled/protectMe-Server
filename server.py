@@ -9,6 +9,7 @@ import re
 import random
 import subprocess
 import sys
+import string
 import os
 from Crypto.Cipher import AES
 from datetime import datetime
@@ -103,13 +104,17 @@ def configureStaticIP(adresseIP,routerIP):
 
 def addPiVpnProfile(profileName, profilePass):
 	log(profileName)
-	addProfileVPN = "pivpn -a -n "+profileName+" -p "+profilePass
-        process = subprocess.Popen(addProfileVPN, stdout=subprocess.PIPE, shell=True)
+	#addProfileVPN = "pivpn -a -n "+profileName+" -p "+profilePass
+	addProfileVPN = "pivpn -a nopass -n "+profileName
+	process = subprocess.Popen(addProfileVPN, stdout=subprocess.PIPE, shell=True)
         (output, error) = process.communicate()
         p_status = process.wait()
 	log("Command output: " + output)
 	if error is not None:
 		log("Command error: " + error)
+
+def randomPassGen(size=8, chars=string.ascii_letters + string.digits + string.punctuation):
+	return ''.join(random.choice(chars) for _ in range(size))
 
 def configureBox(client_sock):
     message =""
@@ -203,12 +208,17 @@ def configureBox(client_sock):
 		profileName = profileName.replace(".","-")
 		profileName = profileName.replace(":","-")
 
-		addPiVpnProfile(profileName, wifiPass)
-
+		ovpnPassword = randomPassGen()
+		addPiVpnProfile(profileName, ovpnPassword)
+		#opvnProfileNamePassword = "<auth-user-pass>\n"+profileName+"\n"+ovpnPassword+"\n</auth-user-pass>\n"
+		opvnProfileNamePassword = "<auth-user-pass>\n"+"test"+"\n"+"test"+"\n</auth-user-pass>\n"
 		#10. send openVpn profile (.ovpn file)
 		PATH = "/home/pi/ovpns/"
 		profileName = "test"+".ovpn"
 		ovpnFile = open(PATH+profileName,"r").read()
+
+		#    Adding profilName and password in the beginning
+		ovpnFile = opvnProfileNamePassword + ovpnFile
 		print(ovpnFile)
 
 		#   Send
@@ -216,18 +226,12 @@ def configureBox(client_sock):
 		ovpnFile = pad(ovpnFile)
                 cipher = AES.new(sharedKey, AES.MODE_CBC, iv)
 		cipherText = base64.b64encode(iv + cipher.encrypt(ovpnFile))
+		# Send length of ovpn cyphertext
 		client_sock.sendall(str(len(str(cipherText))))
+		# Receive acquitement
 		data = client_sock.recv(1024)
+		# Send cyphertext
 		client_sock.sendall(cipherText)
-		
-		#send length
-		#print(str(len(str(ovpnFile))))
-		#client_sock.sendall(str(len(str(ovpnFile))))
-		# receive acquitement
-		#data = client_sock.recv(1024)
-		# send Data
-                #client_sock.sendall(ovpnFile)
-
 
     except IOError:
         pass
@@ -266,6 +270,6 @@ if __name__ == "__main__":
 	#process = subprocess.Popen(addProfileVPN, stdout=subprocess.PIPE, shell=True)
 	#(output, error) = process.communicate()
 	#p_status = process.wait()
-	#print("Command output: " + output)
-	main()
+	addPiVpnProfile("test3","test3")
+	#main()
 
