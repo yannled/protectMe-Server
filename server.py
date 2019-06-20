@@ -25,19 +25,19 @@ if(len(sys.argv[1:])>=1 and sys.argv[1]=="debug"):
 	DEBUG = True
 
 #definition of the socket
-server_sock=BluetoothSocket( RFCOMM )
-server_sock.bind(("",PORT_ANY))
-server_sock.listen(1)
-port = server_sock.getsockname()[1]
+#server_sock=BluetoothSocket( RFCOMM )
+#server_sock.bind(("",PORT_ANY))
+#server_sock.listen(1)
+#port = server_sock.getsockname()[1]
 
 #uuid = "94f39d29-7d6d-437d-973b-fba39e49d4ee"
-uuid = "00001101-0000-1000-8000-00805F9B34FB"
+#uuid = "00001101-0000-1000-8000-00805F9B34FB"
 
-advertise_service( server_sock, "SampleServer",
-       	           service_id = uuid,
-               	   service_classes = [ uuid, SERIAL_PORT_CLASS ],
-               	 profiles = [ SERIAL_PORT_PROFILE ] 
-               	)
+#advertise_service( server_sock, "SampleServer",
+#       	           service_id = uuid,
+#               	   service_classes = [ uuid, SERIAL_PORT_CLASS ],
+#               	 profiles = [ SERIAL_PORT_PROFILE ] 
+#               	)
 
 def log(s):
         if DEBUG:
@@ -100,6 +100,23 @@ def configureStaticIP(adresseIP,routerIP):
 
 	with open(filename,"a") as dhcpd:
 		dhcpd.write("interface wlan0\n\tstatic ip_address="+adresseIP+"\n\tstatic routers="+routerIP+"\n\tstatic domain_name_servers="+routerIP+"\n")
+
+def deleteOldProfiles():
+	PATH = "/home/pi/ovpns/"
+	os.system(PATH+" rm *")
+	listProfileVPN = "pivpn -l"
+        process = subprocess.Popen(listProfileVPN, stdout=subprocess.PIPE, shell=True)
+	(output, error) = process.communicate()
+        p_status = process.wait()
+	profiles = output.split("\n")
+	for profile in profiles:
+		if("Valid" in profile):
+			profileName = profile[18:]
+			delProfileVPN = "pivpn -r "+profileName
+			process = subprocess.Popen(delProfileVPN, stdout=subprocess.PIPE, shell=True)
+        		(output, error) = process.communicate()
+		        p_status = process.wait()
+
 
 
 def addPiVpnProfile(profileName, profilePass):
@@ -199,6 +216,9 @@ def configureBox(client_sock):
         		routerIp = splitIP[0]+"."+ splitIP[1]+"."+ splitIP[2] +"."+"1"
 
 			configureStaticIP(adresseIP,routerIp)
+
+			#  Delete old ovpnFiles and reinvoke olds profiles
+			deleteOldProfiles()
 	        #9.  Create OpenVpn Profile
 		now = datetime.now()
         	profileName = wifiName+str(now)
@@ -211,14 +231,14 @@ def configureBox(client_sock):
 		ovpnPassword = randomPassGen()
 		addPiVpnProfile(profileName, ovpnPassword)
 		#opvnProfileNamePassword = "<auth-user-pass>\n"+profileName+"\n"+ovpnPassword+"\n</auth-user-pass>\n"
-		opvnProfileNamePassword = "<auth-user-pass>\n"+"test"+"\n"+"test"+"\n</auth-user-pass>\n"
+		#opvnProfileNamePassword = "<auth-user-pass>\n"+"test"+"\n"+"test"+"\n</auth-user-pass>\n"
 		#10. send openVpn profile (.ovpn file)
 		PATH = "/home/pi/ovpns/"
 		profileName = "test"+".ovpn"
 		ovpnFile = open(PATH+profileName,"r").read()
 
 		#    Adding profilName and password in the beginning
-		ovpnFile = opvnProfileNamePassword + ovpnFile
+		#ovpnFile = opvnProfileNamePassword + ovpnFile
 		print(ovpnFile)
 
 		#   Send
@@ -239,37 +259,33 @@ def configureBox(client_sock):
     print "disconnected"
 
     client_sock.close()
-    server_sock.close()
+   # server_sock.close()
     print "all done"
 
 
 def main():
 	while(True):
+		#definition of the socket
+		server_sock=BluetoothSocket( RFCOMM )
+		server_sock.bind(("",PORT_ANY))
+		server_sock.listen(1)
+		port = server_sock.getsockname()[1]
+
+		#uuid = "94f39d29-7d6d-437d-973b-fba39e49d4ee"
+		uuid = "00001101-0000-1000-8000-00805F9B34FB"
+
+		advertise_service( server_sock, "SampleServer",
+                   service_id = uuid,
+                   service_classes = [ uuid, SERIAL_PORT_CLASS ],
+                 profiles = [ SERIAL_PORT_PROFILE ] 
+                )
+
 		log("Waiting for connection on RFCOMM channel : " + str(port))
 		client_sock, client_info = server_sock.accept()
 
 		log("Accepted connection from " + str(client_info))
 
-		#actionChoice = ""
-		#data = client_sock.recv(1024)
-
 		configureBox(client_sock)
 
 if __name__ == "__main__":
-	#configureWifi("wifideTest", "123456eartzui")
-	#configureStaticIP("10.0.0.34","10.0.0.1")
-        #ni.ifaddresses("wlan0")
-        #adresseIP = ni.ifaddresses("wlan0")[ni.AF_INET][0]['addr']
-	#print(adresseIP)
-	#splitIP = adresseIP.split(".")
-	#routerIp = splitIP[0]+"."+ splitIP[1]+"."+ splitIP[2] +"."+"1"
-	#print(routerIp)
-	#ProfileName = "bounboubnboub"
-	#password = "zolozo"
-	#addProfileVPN = "pivpn -a -n "+ProfileName+" -p "+password
-	#process = subprocess.Popen(addProfileVPN, stdout=subprocess.PIPE, shell=True)
-	#(output, error) = process.communicate()
-	#p_status = process.wait()
-	addPiVpnProfile("test3","test3")
-	#main()
-
+	main()
