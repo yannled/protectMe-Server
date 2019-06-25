@@ -6,5 +6,5 @@
 
 import portforwardlib
 
-result = portforwardlib.forwardPort('443','433', "10.0.0.1", None, True, 'TCP', 0, "protectmeVPN", True)
+result = portforwardlib.forwardPort('443','433', "192.168.1.1", None, True, 'TCP', 0, "protectmeVPN", True)
 print(result)

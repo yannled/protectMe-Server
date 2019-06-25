@@ -103,7 +103,7 @@ def configureStaticIP(adresseIP,routerIP):
 
 def deleteOldProfiles():
 	PATH = "/home/pi/ovpns/"
-	os.system(PATH+" rm *")
+	os.system("sudo "+PATH+" rm *")
 	listProfileVPN = "pivpn -l"
         process = subprocess.Popen(listProfileVPN, stdout=subprocess.PIPE, shell=True)
 	(output, error) = process.communicate()
@@ -122,7 +122,7 @@ def deleteOldProfiles():
 def addPiVpnProfile(profileName, profilePass):
 	log(profileName)
 	#addProfileVPN = "pivpn -a -n "+profileName+" -p "+profilePass
-	addProfileVPN = "pivpn -a nopass -n "+profileName
+	addProfileVPN = "pivpn -a nopass -n "+profileName+" -d 1080"
 	process = subprocess.Popen(addProfileVPN, stdout=subprocess.PIPE, shell=True)
         (output, error) = process.communicate()
         p_status = process.wait()
@@ -132,6 +132,22 @@ def addPiVpnProfile(profileName, profilePass):
 
 def randomPassGen(size=8, chars=string.ascii_letters + string.digits + string.punctuation):
 	return ''.join(random.choice(chars) for _ in range(size))
+
+def addPortForwardingThenReturnPubicIP():
+	addPortForwarding = "upnpc -r 443 tcp"
+        process = subprocess.Popen(addPortForwarding, stdout=subprocess.PIPE, shell=True)
+        (output, error) = process.communicate()
+        p_status = process.wait()
+        log("Command output: " + output)
+        if error is not None:
+                log("Command error: " + error)
+		return "0.0.0.0"
+
+	lines = output.split("\n")
+	fragments = lines[9].split(" ")
+	ipPublic = fragments[2]
+	log("External IP : " + ipPublic)
+        return ipPublic
 
 def configureBox(client_sock):
     message =""
@@ -206,10 +222,13 @@ def configureBox(client_sock):
 		if("FirstConfig" in message) :
 			log("First configuration")
 			#   Configure WIFI and PIVPN ip static
+			log("Configure Wifi")
 			configureWifi(wifiName,wifiPass)
+			log("Delete static IP")
 			deleteStaticIP()
 			time.sleep(15)
 	        	#   Configure PIVPN IP static 
+			log("configure static IP")
 			ni.ifaddresses("wlan0")
         		adresseIP = ni.ifaddresses("wlan0")[ni.AF_INET][0]['addr']
         		splitIP = adresseIP.split(".")
@@ -218,17 +237,23 @@ def configureBox(client_sock):
 			configureStaticIP(adresseIP,routerIp)
 
 			#  Delete old ovpnFiles and reinvoke olds profiles
+			log("Delete old ovpn profiles")
 			deleteOldProfiles()
+		#9.  Add Port forwarding and get public IP
+		addPortForwardingThenReturnPubicIP()
+
 	        #9.  Create OpenVpn Profile
 		now = datetime.now()
         	profileName = wifiName+str(now)
 		# TODO FAIRE FONCTION AVEC TOUS CARAC FORMATAGE
-        	profileName = profileName.replace(" ","-")
-		profileName = profileName.replace("_","-")
-		profileName = profileName.replace(".","-")
-		profileName = profileName.replace(":","-")
+        	profileName = profileName.replace(" ","_")
+		profileName = profileName.replace("-","_")
+		profileName = profileName.replace(".","_")
+		profileName = profileName.replace(":","_")
+		profileName = profileName.lower()
 
 		ovpnPassword = randomPassGen()
+		log("Adding profile")
 		addPiVpnProfile(profileName, ovpnPassword)
 		#opvnProfileNamePassword = "<auth-user-pass>\n"+profileName+"\n"+ovpnPassword+"\n</auth-user-pass>\n"
 		#opvnProfileNamePassword = "<auth-user-pass>\n"+"test"+"\n"+"test"+"\n</auth-user-pass>\n"
@@ -288,4 +313,5 @@ def main():
 		configureBox(client_sock)
 
 if __name__ == "__main__":
-	main()
+	addPortForwardingThenReturnPubicIP()
+	#main()
