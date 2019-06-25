@@ -1,6 +1,5 @@
-# file: rfcomm-server.py auth: Albert Huang <albert@csail.mit.edu> desc: 
-# simple demonstration of a server application that uses RFCOMM sockets#
-# $Id: rfcomm-server.py 518 2007-08-10 07:20:07Z albert $
+#!/usr/bin/python
+# source: rfcomm-server.py auth: Albert Huang <albert@csail.mit.edu> desc:
 
 from bluetooth import *
 import time
@@ -8,275 +7,283 @@ import base64
 import re
 import random
 import subprocess
-import sys
 import string
 import os
 from Crypto.Cipher import AES
 from datetime import datetime
+
 rand_gen = random.SystemRandom()
-from Crypto import Random
 from struct import *
 import netifaces as ni
 from Crypto.Util.number import long_to_bytes
 
-#debug mode to show more information of running script
+# debug mode to show more information of running script
 DEBUG = False
-if(len(sys.argv[1:])>=1 and sys.argv[1]=="debug"):
-	DEBUG = True
-
-#definition of the socket
-#server_sock=BluetoothSocket( RFCOMM )
-#server_sock.bind(("",PORT_ANY))
-#server_sock.listen(1)
-#port = server_sock.getsockname()[1]
-
-#uuid = "94f39d29-7d6d-437d-973b-fba39e49d4ee"
-#uuid = "00001101-0000-1000-8000-00805F9B34FB"
-
-#advertise_service( server_sock, "SampleServer",
-#       	           service_id = uuid,
-#               	   service_classes = [ uuid, SERIAL_PORT_CLASS ],
-#               	 profiles = [ SERIAL_PORT_PROFILE ] 
-#               	)
+if (len(sys.argv[1:]) >= 1 and sys.argv[1] == "debug"):
+    DEBUG = True
 
 def log(s):
-        if DEBUG:
-            print(s)
+    if DEBUG:
+        print(s)
 
+def sendBashCommand(command):
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True)
+    (output, error) = process.communicate()
+    process.wait()
+    log("Command output: " + output)
+    if error is not None:
+        log("Command error: " + error)
+        return error
+    return output
 
+# Configure and connect to Wifi with ssid and password
 def configureWifi(ssid, password):
-	try:
-		os.system("ifconfig wlan0 down")
-		time.sleep(2)
-	except:
-		log("error during stop wifi")
+    # stop interface wlan
+    try:
+        os.system("ifconfig wlan0 down")
+        time.sleep(2)
+    except:
+        log("error during stop wifi")
 
-	arrayOfLine = []
-	filename = "/etc/wpa_supplicant/wpa_supplicant.conf"
-	with open(filename, "r") as oldFile:
-		for line in oldFile:
-			arrayOfLine.append(line)
-	os.remove(filename)
+    # get actual wpa configurations and saved wifi
+    arrayOfLine = []
+    filename = "/etc/wpa_supplicant/wpa_supplicant.conf"
+    with open(filename, "r") as oldFile:
+        for line in oldFile:
+            arrayOfLine.append(line)
+    os.remove(filename)
 
-	counter = 0
-    	with open(filename, "a+") as wpa_supplicant:
-		while(counter<3):
-			wpa_supplicant.write(arrayOfLine[counter])
-			counter+=1
-		wpa_supplicant.write("network={\n\tssid=\""+ssid+"\"\n\tpsk=\"" + password + "\"\n\tkey_mgmt=WPA-PSK\n}")
+    # copy the first three lines
+    #   ctrl_interfaces=...
+    #   update_config=1
+    #   country=CH
+    # then write new wpa configuration
+    counter = 0
+    with open(filename, "a+") as wpa_supplicant:
+        while (counter < 3):
+            wpa_supplicant.write(arrayOfLine[counter])
+            counter += 1
+        wpa_supplicant.write("network={\n\tssid=\"" + ssid + "\"\n\tpsk=\"" + password + "\"\n\tkey_mgmt=WPA-PSK\n}")
 
-	try:
-		os.system("ifconfig wlan0 up")
-		time.sleep(2)
-		os.system("sudo wpa_cli -i wlan0 reconfigure")
-		time.sleep(2)
-	except:
-		log("error during start wifi")
+    # restart interface wlan
+    try:
+        os.system("ifconfig wlan0 up")
+        time.sleep(2)
+        os.system("sudo wpa_cli -i wlan0 reconfigure")
+        time.sleep(2)
+    except:
+        log("error during start wifi")
 
-
+# remove static IP and enable dhcp
 def deleteStaticIP():
-	filename = "/etc/dhcpcd.conf"
-        with open(filename,"r") as infile:
-	        lines = infile.readlines()
+    filename = "/etc/dhcpcd.conf"
+    with open(filename, "r") as infile:
+        lines = infile.readlines()
 
-        position = -100
-        with open(filename,"w") as outfile:
-                for pos, line in enumerate(lines):
-                        if "interface wlan0" in line:
-                                print(line)
-                                position = pos
-                        if pos == position+1 :
-                                continue
-                        if pos == position+2 :
-                                continue
-                        if pos == position+3  :
-                                continue
-                        if "interface wlan0" not in line:
-                                outfile.write(line)
+    # rewrite all the content except three lines following "interface wlan0"
+    position = -100
+    with open(filename, "w") as outfile:
+        for pos, line in enumerate(lines):
+            if "interface wlan0" in line:
+                position = pos
+            if pos == position + 1:
+                continue
+            if pos == position + 2:
+                continue
+            if pos == position + 3:
+                continue
+            if "interface wlan0" not in line:
+                outfile.write(line)
 
+# configure static IP
+def configureStaticIP(adresseIP, routerIP):
+    filename = "/etc/dhcpcd.conf"
 
-def configureStaticIP(adresseIP,routerIP):
-	filename = "/etc/dhcpcd.conf"
+    # write the three lines for static configuration a the end of the file
+    with open(filename, "a") as dhcpd:
+        dhcpd.write(
+            "interface wlan0\n\tstatic ip_address=" + adresseIP + "\n\tstatic routers=" + routerIP + "\n\tstatic domain_name_servers=" + routerIP + "\n")
 
-	with open(filename,"a") as dhcpd:
-		dhcpd.write("interface wlan0\n\tstatic ip_address="+adresseIP+"\n\tstatic routers="+routerIP+"\n\tstatic domain_name_servers="+routerIP+"\n")
-
+# delete all old ovpn files and reinvoke old profiles
 def deleteOldProfiles():
-	PATH = "/home/pi/ovpns/"
-	os.system("sudo "+PATH+" rm *")
-	listProfileVPN = "pivpn -l"
-        process = subprocess.Popen(listProfileVPN, stdout=subprocess.PIPE, shell=True)
-	(output, error) = process.communicate()
-        p_status = process.wait()
-	profiles = output.split("\n")
-	for profile in profiles:
-		if("Valid" in profile):
-			profileName = profile[18:]
-			delProfileVPN = "pivpn -r "+profileName
-			process = subprocess.Popen(delProfileVPN, stdout=subprocess.PIPE, shell=True)
-        		(output, error) = process.communicate()
-		        p_status = process.wait()
+    PATH = "/home/pi/ovpns/"
+    # delete files
+    os.system("sudo " + PATH + " rm *")
+    listProfileVPN = "pivpn -l"
+    output = sendBashCommand(listProfileVPN)
+    # parse output to get profiles names
+    profiles = output.split("\n")
+    for profile in profiles:
+        if ("Valid" in profile):
+            profileName = profile[18:]
+            # reinvoke profile
+            delProfileVPN = "pivpn -r " + profileName
+            sendBashCommand(delProfileVPN)
 
-
-
+# Add new profile to piVpn
 def addPiVpnProfile(profileName, profilePass):
-	log(profileName)
-	#addProfileVPN = "pivpn -a -n "+profileName+" -p "+profilePass
-	addProfileVPN = "pivpn -a nopass -n "+profileName+" -d 1080"
-	process = subprocess.Popen(addProfileVPN, stdout=subprocess.PIPE, shell=True)
-        (output, error) = process.communicate()
-        p_status = process.wait()
-	log("Command output: " + output)
-	if error is not None:
-		log("Command error: " + error)
+    log(profileName)
+    # addProfileVPN = "pivpn -a -n "+profileName+" -p "+profilePass
+    addProfileVPN = "pivpn -a nopass -n " + profileName + " -d 1080"
+    sendBashCommand(addProfileVPN)
 
+# Generate new random password
 def randomPassGen(size=8, chars=string.ascii_letters + string.digits + string.punctuation):
-	return ''.join(random.choice(chars) for _ in range(size))
+    return ''.join(random.choice(chars) for _ in range(size))
 
+# Add portForwarding on the routeur through upnpc commands
 def addPortForwardingThenReturnPubicIP():
-	addPortForwarding = "upnpc -r 443 tcp"
-        process = subprocess.Popen(addPortForwarding, stdout=subprocess.PIPE, shell=True)
-        (output, error) = process.communicate()
-        p_status = process.wait()
-        log("Command output: " + output)
-        if error is not None:
-                log("Command error: " + error)
-		return "0.0.0.0"
+    addPortForwarding = "upnpc -r 443 tcp"
+    output = sendBashCommand(addPortForwarding)
 
-	lines = output.split("\n")
-	fragments = lines[9].split(" ")
-	ipPublic = fragments[2]
-	log("External IP : " + ipPublic)
-        return ipPublic
+    lines = output.split("\n")
+    fragments = lines[9].split(" ")
+    ipPublic = fragments[2]
+    log("External IP : " + ipPublic)
+    return ipPublic
 
+def formatProfileName(profileName):
+    profileName = profileName.replace(" ", "_")
+    profileName = profileName.replace("-", "_")
+    profileName = profileName.replace(".", "_")
+    profileName = profileName.replace(":", "_")
+    profileName = profileName.lower()
+    return profileName
+
+
+# configure or Add new Profile by Bluetooth
 def configureBox(client_sock):
-    message =""
+    message = ""
     pattern = re.compile(r'\{(.*?)\}')
     try:
         while True:
             data = client_sock.recv(1024)
             message = message + data
-       	    log("received [" +  str(data)+"]")
-	    if("endCryptoExchange" in data) : break
+            log("received [" + str(data) + "]")
+            if ("endCryptoExchange" in data): break
 
-        if("endCryptoExchange" in data) :
-		print "begincrypto"
-            	#1. split receive PublicKey, P and G (format : OpenSSLDHPublicKey{Y=...,P=...,G=...})
+        if ("endCryptoExchange" in data):
+            print "begincrypto"
+            # 1. split receive PublicKey, P and G (format : OpenSSLDHPublicKey{Y=...,P=...,G=...})
 
-            	#   Get params in {}
-		receiveParams = pattern.findall(message)
+            #   Get params in {}
+            receiveParams = pattern.findall(message)
 
-		#   Get params in table
-            	params = receiveParams[0].split(',')
+            #   Get params in table
+            params = receiveParams[0].split(',')
 
-            	#   Extract Receive Public key
-                receiveKey = int(params[0][2:],10)
-		log("Receive publicKey : " + str(receiveKey))
-                #   Exctract P and G
-                p = int(params[1][2:],10)
-                g = int(params[2][2:],10)
-		log("g : " + str(g) + " p : " + str(p))
+            #   Extract Receive Public key
+            receiveKey = int(params[0][2:], 10)
+            log("Receive publicKey : " + str(receiveKey))
 
-                #2. Generate privateKey (Greater than 2 less than P)
-                privateKey =  rand_gen.randint(2,p-g)
-		log("private Key : " + str(privateKey))
+            #   Exctract P and G
+            p = int(params[1][2:], 10)
+            g = int(params[2][2:], 10)
+            log("g : " + str(g) + " p : " + str(p))
 
-                #3. Generate New Public key (pubKey = g**privateKey mod p)
-                publicKey = pow(g, privateKey, (p))
-		log("PublicKey : " + str(publicKey))
-		log("PublicKey < p ?  :" + str(publicKey < p) )
+            # 2. Generate privateKey (Greater than 2 less than P)
+            privateKey = rand_gen.randint(2, p - g)
+            log("private Key : " + str(privateKey))
 
-                #4. Generate Shared Key (key = receivePubKey**privateKey mod p)
-                sharedKeyInt = pow(receiveKey, privateKey, p)
-		log("sharedKeyInt : " + str(sharedKeyInt))
-		#   Convert it to Bytes
-		sharedKeyBytes = long_to_bytes(sharedKeyInt)
-		#   Reduce key as 16 Bytes
-                sharedKey =  sharedKeyBytes[:16]
-		log("my key : " + sharedKey + " length : " + str(len(sharedKey)))
-		print(sharedKey)
-                #5. Send public Key
-		client_sock.sendall(str(len(str(publicKey))))
-		client_sock.sendall(str(publicKey))
+            # 3. Generate New Public key (pubKey = g**privateKey mod p)
+            publicKey = pow(g, privateKey, (p))
+            log("PublicKey : " + str(publicKey))
+            log("PublicKey < p ?  :" + str(publicKey < p))
 
-                #6. Receive CypherText Wifi name then wifi password
-		data = client_sock.recv(1024)
-		log("cyphertext in base64 : " + data)
-		#   Decode cyphertext
-		data = base64.b64decode(data)
-		log("nbr carac decode cyphertext : " + str(len(data)))
-		log(" cyphertext : " + data)
-		#   Extract IV
-		iv = data[:16]
+            # 4. Generate Shared Key (key = receivePubKey**privateKey mod p)
+            sharedKeyInt = pow(receiveKey, privateKey, p)
+            log("sharedKeyInt : " + str(sharedKeyInt))
 
-		#7. Decrypt
-		encryption_suite = AES.new(sharedKey, AES.MODE_CBC,iv)
-		plaintext = encryption_suite.decrypt(data[16:])
-		print("Wifi name then wifi password : " + plaintext)
+            #   Convert it to Bytes
+            sharedKeyBytes = long_to_bytes(sharedKeyInt)
 
-		wifiParams = pattern.findall(plaintext)
-		wifiName = wifiParams[0]
-		wifiPass = wifiParams[1]
-		#8 Si c'est une configuration faire le if, si c'est juste un ajoute
-		#  de smartphone alors eviter.
-		if("FirstConfig" in message) :
-			log("First configuration")
-			#   Configure WIFI and PIVPN ip static
-			log("Configure Wifi")
-			configureWifi(wifiName,wifiPass)
-			log("Delete static IP")
-			deleteStaticIP()
-			time.sleep(15)
-	        	#   Configure PIVPN IP static 
-			log("configure static IP")
-			ni.ifaddresses("wlan0")
-        		adresseIP = ni.ifaddresses("wlan0")[ni.AF_INET][0]['addr']
-        		splitIP = adresseIP.split(".")
-        		routerIp = splitIP[0]+"."+ splitIP[1]+"."+ splitIP[2] +"."+"1"
+            #   Reduce key as 16 Bytes
+            sharedKey = sharedKeyBytes[:16]
+            log("my key : " + sharedKey + " length : " + str(len(sharedKey)))
 
-			configureStaticIP(adresseIP,routerIp)
+            # 5. Send public Key
+            client_sock.sendall(str(len(str(publicKey))))
+            client_sock.sendall(str(publicKey))
 
-			#  Delete old ovpnFiles and reinvoke olds profiles
-			log("Delete old ovpn profiles")
-			deleteOldProfiles()
-		#9.  Add Port forwarding and get public IP
-		addPortForwardingThenReturnPubicIP()
+            # 6. Receive CypherText Wifi name then wifi password
+            data = client_sock.recv(1024)
+            log("cyphertext in base64 : " + data)
 
-	        #9.  Create OpenVpn Profile
-		now = datetime.now()
-        	profileName = wifiName+str(now)
-		# TODO FAIRE FONCTION AVEC TOUS CARAC FORMATAGE
-        	profileName = profileName.replace(" ","_")
-		profileName = profileName.replace("-","_")
-		profileName = profileName.replace(".","_")
-		profileName = profileName.replace(":","_")
-		profileName = profileName.lower()
+            #   Decode cyphertext
+            data = base64.b64decode(data)
+            log("nbr carac decode cyphertext : " + str(len(data)))
+            log(" cyphertext : " + data)
 
-		ovpnPassword = randomPassGen()
-		log("Adding profile")
-		addPiVpnProfile(profileName, ovpnPassword)
-		#opvnProfileNamePassword = "<auth-user-pass>\n"+profileName+"\n"+ovpnPassword+"\n</auth-user-pass>\n"
-		#opvnProfileNamePassword = "<auth-user-pass>\n"+"test"+"\n"+"test"+"\n</auth-user-pass>\n"
-		#10. send openVpn profile (.ovpn file)
-		PATH = "/home/pi/ovpns/"
-		profileName = "test"+".ovpn"
-		ovpnFile = open(PATH+profileName,"r").read()
+            #   Extract IV
+            iv = data[:16]
 
-		#    Adding profilName and password in the beginning
-		#ovpnFile = opvnProfileNamePassword + ovpnFile
-		print(ovpnFile)
+            # 7. Decrypt
+            encryption_suite = AES.new(sharedKey, AES.MODE_CBC, iv)
+            plaintext = encryption_suite.decrypt(data[16:])
+            print("Wifi name then wifi password : " + plaintext)
 
-		#   Send
-		pad = lambda s: s + (16 - len(s) % 16) * chr(16 - len(s) % 16)
-		ovpnFile = pad(ovpnFile)
-                cipher = AES.new(sharedKey, AES.MODE_CBC, iv)
-		cipherText = base64.b64encode(iv + cipher.encrypt(ovpnFile))
-		# Send length of ovpn cyphertext
-		client_sock.sendall(str(len(str(cipherText))))
-		# Receive acquitement
-		data = client_sock.recv(1024)
-		# Send cyphertext
-		client_sock.sendall(cipherText)
+            wifiParams = pattern.findall(plaintext)
+            wifiName = wifiParams[0]
+            wifiPass = wifiParams[1]
+
+            # 8. if this is a new configuration go into if. If this is just for adding profile bypass if.
+            if ("FirstConfig" in message):
+                log("First configuration")
+
+                #   Configure WIFI and PIVPN ip static
+                log("Configure Wifi")
+                configureWifi(wifiName, wifiPass)
+                log("Delete static IP")
+                deleteStaticIP()
+                time.sleep(15)
+
+                #   Configure PIVPN IP static
+                log("configure static IP")
+                ni.ifaddresses("wlan0")
+                adresseIP = ni.ifaddresses("wlan0")[ni.AF_INET][0]['addr']
+                splitIP = adresseIP.split(".")
+                routerIp = splitIP[0] + "." + splitIP[1] + "." + splitIP[2] + "." + "1"
+
+                configureStaticIP(adresseIP, routerIp)
+
+                #  Delete old ovpnFiles and reinvoke olds profiles
+                log("Delete old ovpn profiles")
+                deleteOldProfiles()
+
+            # 9.  Add Port forwarding and get public IP
+            publicIp = addPortForwardingThenReturnPubicIP()
+
+            # 10. Create OpenVpn Profile
+            now = datetime.now()
+            profileName = wifiName + str(now)
+            profileName = formatProfileName(profileName)
+
+            ovpnPassword = randomPassGen()
+            log("Adding profile")
+            addPiVpnProfile(profileName, ovpnPassword)
+            # opvnProfileNamePassword = "<auth-user-pass>\n"+profileName+"\n"+ovpnPassword+"\n</auth-user-pass>\n"
+            # opvnProfileNamePassword = "<auth-user-pass>\n"+"test"+"\n"+"test"+"\n</auth-user-pass>\n"
+
+            # 11. Send openVpn profile (.ovpn file)
+            PATH = "/home/pi/ovpns/"
+            profileName = profileName + ".ovpn"
+            ovpnFile = open(PATH + profileName, "r").read()
+
+            #    Adding profilName and password in the beginning
+            # ovpnFile = opvnProfileNamePassword + ovpnFile
+            log(ovpnFile)
+
+            # encrypt
+            pad = lambda s: s + (16 - len(s) % 16) * chr(16 - len(s) % 16)
+            ovpnFile = pad(ovpnFile)
+            cipher = AES.new(sharedKey, AES.MODE_CBC, iv)
+            cipherText = base64.b64encode(iv + cipher.encrypt(ovpnFile))
+            # Send length of ovpn cyphertext
+            client_sock.sendall(str(len(str(cipherText))))
+            # Receive acquitement
+            data = client_sock.recv(1024)
+            # Send cyphertext
+            client_sock.sendall(cipherText)
 
     except IOError:
         pass
@@ -284,34 +291,34 @@ def configureBox(client_sock):
     print "disconnected"
 
     client_sock.close()
-   # server_sock.close()
     print "all done"
 
 
 def main():
-	while(True):
-		#definition of the socket
-		server_sock=BluetoothSocket( RFCOMM )
-		server_sock.bind(("",PORT_ANY))
-		server_sock.listen(1)
-		port = server_sock.getsockname()[1]
+    while (True):
+        # definition of the socket
+        server_sock = BluetoothSocket(RFCOMM)
+        server_sock.bind(("", PORT_ANY))
+        server_sock.listen(1)
+        port = server_sock.getsockname()[1]
 
-		#uuid = "94f39d29-7d6d-437d-973b-fba39e49d4ee"
-		uuid = "00001101-0000-1000-8000-00805F9B34FB"
+        # uuid = "94f39d29-7d6d-437d-973b-fba39e49d4ee"
+        uuid = "00001101-0000-1000-8000-00805F9B34FB"
 
-		advertise_service( server_sock, "SampleServer",
-                   service_id = uuid,
-                   service_classes = [ uuid, SERIAL_PORT_CLASS ],
-                 profiles = [ SERIAL_PORT_PROFILE ] 
-                )
+        advertise_service(server_sock, "SampleServer",
+                          service_id=uuid,
+                          service_classes=[uuid, SERIAL_PORT_CLASS],
+                          profiles=[SERIAL_PORT_PROFILE]
+                          )
 
-		log("Waiting for connection on RFCOMM channel : " + str(port))
-		client_sock, client_info = server_sock.accept()
+        log("Waiting for connection on RFCOMM channel : " + str(port))
+        client_sock, client_info = server_sock.accept()
 
-		log("Accepted connection from " + str(client_info))
+        log("Accepted connection from " + str(client_info))
 
-		configureBox(client_sock)
+        configureBox(client_sock)
+
 
 if __name__ == "__main__":
-	addPortForwardingThenReturnPubicIP()
-	#main()
+    addPortForwardingThenReturnPubicIP()
+    main()
