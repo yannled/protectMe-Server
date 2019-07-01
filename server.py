@@ -137,10 +137,21 @@ def addPortForwardingThenReturnPubicIP():
     output = sendBashCommand(addPortForwarding)
 
     lines = output.split("\n")
-    fragments = lines[9].split(" ")
-    ipPublic = fragments[2]
-    log("External IP : " + ipPublic)
-    return ipPublic
+    for line in lines:
+	if "ExternalIPAddress" in line:
+		fragments = line.split(" ")
+		ipPublic = fragments[2]
+	        log("External IP : " + ipPublic)
+                return ipPublic
+
+def modifyPublicIpOvpnProfile(profile, publicIp):
+    newProfile = ""
+    lines = profile.split('\n')
+    for line in lines :
+	if('443' in line):
+		line = "remote " + publicIp + " 443"
+        newProfile = newProfile + line + '\n'
+    return newProfile
 
 def formatProfileName(profileName):
     profileName = profileName.replace(" ", "_")
@@ -264,11 +275,15 @@ def configureBox(client_sock):
             # opvnProfileNamePassword = "<auth-user-pass>\n"+profileName+"\n"+ovpnPassword+"\n</auth-user-pass>\n"
             # opvnProfileNamePassword = "<auth-user-pass>\n"+"test"+"\n"+"test"+"\n</auth-user-pass>\n"
 
-            # 11. Send openVpn profile (.ovpn file)
+            # 11. Get openVpn profile (.ovpn file)
             PATH = "/home/pi/ovpns/"
-            profileName = profileName + ".ovpn"
+            profileName = "test" + ".ovpn"
             ovpnFile = open(PATH + profileName, "r").read()
 
+	    # 12. Modify public IP in the profile
+            #ovpnFile = modifyPublicIpOvpnProfile(PATH+profileName, "193.134.219.72")
+
+	    # 13. Send Profile
             #    Adding profilName and password in the beginning
             # ovpnFile = opvnProfileNamePassword + ovpnFile
             log(ovpnFile)
@@ -320,5 +335,4 @@ def main():
 
 
 if __name__ == "__main__":
-    addPortForwardingThenReturnPubicIP()
     main()
