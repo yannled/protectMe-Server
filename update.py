@@ -81,13 +81,13 @@ def mainOnRaspFull():
 # use this main if you are on the Lite Raspbian Partition
 def mainOnRaspLite():
     #change nummber partition for the current one
-    changeBootOptions(currentPath,raspPartition,raspFullNumber)
+    changeBootOptions(currentPath,raspPartition,raspLiteNumber)
 
     #mount other partition to access cmdline file
     mountOtherPartition(otherPath, raspPartition, raspFullNumberConf)
 
     #change number partition for the other one
-    changeBootOptions(otherPath,raspPartition,raspLiteNumber)
+    changeBootOptions(otherPath,raspPartition,raspFullNumber)
 
 
 if __name__ == "__main__":
