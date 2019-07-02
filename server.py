@@ -145,7 +145,7 @@ def addPortForwardingThenReturnPubicIP():
                 return ipPublic
 
 def modifyPublicIpOvpnProfile(profile, publicIp):
-    newProfile = ""
+    newProfile = " "
     lines = profile.split('\n')
     for line in lines :
 	if('443' in line):
@@ -277,11 +277,11 @@ def configureBox(client_sock):
 
             # 11. Get openVpn profile (.ovpn file)
             PATH = "/home/pi/ovpns/"
-            profileName = "test" + ".ovpn"
+            profileName = profileName + ".ovpn"
             ovpnFile = open(PATH + profileName, "r").read()
 
 	    # 12. Modify public IP in the profile
-            #ovpnFile = modifyPublicIpOvpnProfile(PATH+profileName, "193.134.219.72")
+            ovpnFile = modifyPublicIpOvpnProfile(ovpnFile, publicIp)
 
 	    # 13. Send Profile
             #    Adding profilName and password in the beginning
