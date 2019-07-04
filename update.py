@@ -13,6 +13,7 @@ raspPartition = "mmcblk0p"
 #Number of full and lite partition
 raspFullNumber = "7"
 raspLiteNumber = "9"
+raspDataNumber = "10"
 
 #Number of full and lite partition configuration
 raspFullNumberConf = "6"
@@ -21,13 +22,25 @@ raspLiteNumberConf = "8"
 #Path current Partition
 currentPath = "/boot"
 
+#Path data Partition
+dataPath = "/mnt/data"
+
 #Path other Partition
 otherPath = "/mnt/tmp"
 
-# debug mode to show more information of running script
+# detect if hash is pass as argument, or ask for debug mode
 DEBUG = False
-if (len(sys.argv[1:]) >= 1 and sys.argv[1] == "debug"):
-    DEBUG = True
+hash = ""
+if (len(sys.argv[1:]) >= 1):
+        if(len(sys.argv[1:]) >= 2):
+            if(sys.argv[2] == "debug"):
+                DEBUG = True
+            hash = sys.argv[1]
+        else:
+	    if(sys.argv[1] == "debug"):
+                DEBUG = True
+            if(sys.argv[1] != "debug"):
+                hash = sys.argv[1]
 
 def log(s):
     if DEBUG:
@@ -69,17 +82,51 @@ def mountOtherPartition(otherPath, raspPartition, otherPartNumberConf):
 
 # use this main if you are on the Full Raspbian partition
 def mainOnRaspFull():
-    #change nummber partition for the current one
-    changeBootOptions(currentPath,raspPartition,raspLiteNumber)
+    # mount Data partition
+    mountOtherPartition(dataPath,raspPartition,raspDataNumber)
+    # clone updates files in data partition
+    gitClone = "git clone https://github.com/yannled/protectMe-Update.git "+dataPath+"/protectMe-Update"
+    sendBashCommand(gitClone)
+    # get updateFile (.img) from reporitory git
+    updateFile = ""
+    files = os.listdir(dataPath+"/protectMe-Update")
+    for file in files:
+        if ".img" in file:
+		updateFile=file
 
-    #mount other partition to access cmdline file
-    mountOtherPartition(otherPath, raspPartition, raspLiteNumberConf)
+    # calcul hash of .img file (updateFile)
+    computeHash = "sha1sum "+dataPath+"/protectMe-Update/"+updateFile
+    resultHash = sendBashCommand(computeHash).split(" ")[0]
+    if(resultHash == hash):
+        # backup network files in data partition
+	copyWpa_supplicantFile = "sudo cp /etc/wpa_supplicant/wpa_supplicant.conf "+dataPath+"/wpa_supplicant.conf"
+	sendBashCommand(copyWpa_supplicantFile)
+        copyDhcpcdFile = "sudo cp /etc/dhcpcd.conf "+dataPath+"/dhcpcd.conf"
+	sendBashCommand(copyDhcpcdFile)
+        # Modifiy partiton boot files to reboot to Lite Partition and do the update
 
-    #change number partition for the other one
-    changeBootOptions(otherPath,raspPartition,raspFullNumber)
+        # change nummber partition for the current one
+        changeBootOptions(currentPath,raspPartition,raspLiteNumber)
+
+        # mount other partition to access cmdline file
+        mountOtherPartition(otherPath, raspPartition, raspLiteNumberConf)
+
+        # change number partition for the other one
+        changeBootOptions(otherPath,raspPartition,raspFullNumber)
+
+    # remove git clone
+    removeDir = "rm -r /mnt/data/protectMe-Update"
+    sendBashCommand(removeDir)
+    reboot = "sudo reboot"
+    sendBashCommand(reboot)
 
 # use this main if you are on the Lite Raspbian Partition
 def mainOnRaspLite():
+    # mount Data partition
+    mountOtherPartition(dataPath,raspPartition,raspDataNumber)
+
+    # clone new image to Full partition
+
     #change nummber partition for the current one
     changeBootOptions(currentPath,raspPartition,raspLiteNumber)
 
@@ -89,8 +136,16 @@ def mainOnRaspLite():
     #change number partition for the other one
     changeBootOptions(otherPath,raspPartition,raspFullNumber)
 
+    # copy backup network file from data partition to full partition
+    copyWpa_supplicantFile = "sudo cp "+dataPath+"/wpa_supplicant.conf " +otherPath+ "/etc/wpa_supplicant/wpa_supplicant.conf"
+    sendBashCommand(copyWpa_supplicantFile)
+    copyDhcpcdFile = "sudo cp "+dataPath+"/dhcpcd.conf " +otherPath+ "/etc/dhcpcd.conf"
+    sendBashCommand(copyDhcpcdFile)
+
+    reboot = "sudo reboot"
+    sendBashCommand(reboot)
+
 
 if __name__ == "__main__":
     mainOnRaspFull()
     #mainOnRaspLite()
-

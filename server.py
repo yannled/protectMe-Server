@@ -231,7 +231,20 @@ def configureBox(client_sock):
             # 7. Decrypt
             encryption_suite = AES.new(sharedKey, AES.MODE_CBC, iv)
             plaintext = encryption_suite.decrypt(data[16:])
-            print("Wifi name then wifi password : " + plaintext)
+
+            # if this is just an update we get the hash file then run update script
+            if ("Update" in message):
+                log("Update file Hash : " + plaintext)
+                hash = pattern.findall(plaintext)
+                log(hash)
+		
+                print "disconnected"
+                client_sock.close()
+                print "all done"
+		return
+
+            # if not, we do the configuration or recuperation of profile
+            log("Wifi name then wifi password : " + plaintext)
 
             wifiParams = pattern.findall(plaintext)
             wifiName = wifiParams[0]
