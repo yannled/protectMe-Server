@@ -114,9 +114,6 @@ def mainOnRaspFull():
         # change number partition for the other one
         changeBootOptions(otherPath,raspPartition,raspFullNumber)
 
-    # remove git clone
-    removeDir = "rm -r /mnt/data/protectMe-Update"
-    sendBashCommand(removeDir)
     reboot = "sudo reboot"
     sendBashCommand(reboot)
 
@@ -125,7 +122,16 @@ def mainOnRaspLite():
     # mount Data partition
     mountOtherPartition(dataPath,raspPartition,raspDataNumber)
 
+    # get updateFile (.img) from reporitory git
+    updateFile = ""
+    files = os.listdir(dataPath+"/protectMe-Update")
+    for file in files:
+        if ".img" in file:
+                updateFile=file
+
     # clone new image to Full partition
+    updatePartition = "sudo gunzip -c "+dataPath+"/protectMe-Update/"+updateFile+" | sudo dd of=/dev/"+raspPartition+raspFullNumber
+    sendBashCommand(updatePartition)
 
     #change nummber partition for the current one
     changeBootOptions(currentPath,raspPartition,raspLiteNumber)
@@ -141,6 +147,10 @@ def mainOnRaspLite():
     sendBashCommand(copyWpa_supplicantFile)
     copyDhcpcdFile = "sudo cp "+dataPath+"/dhcpcd.conf " +otherPath+ "/etc/dhcpcd.conf"
     sendBashCommand(copyDhcpcdFile)
+
+    # remove git clone
+    removeDir = "rm -r "+dataPath+"/protectMe-Update"
+    sendBashCommand(removeDir)
 
     reboot = "sudo reboot"
     sendBashCommand(reboot)
