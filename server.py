@@ -237,7 +237,9 @@ def configureBox(client_sock):
                 log("Update file Hash : " + plaintext)
                 hash = pattern.findall(plaintext)
                 log(hash)
-		
+
+                runUpdate = "sudo python ~/protectMe-Server/update.py "+hash
+                sendBashCommand(runUpdate)
                 print "disconnected"
                 client_sock.close()
                 print "all done"
