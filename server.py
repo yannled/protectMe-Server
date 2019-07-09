@@ -33,7 +33,7 @@ def sendBashCommand(command):
     log("Command output: " + output)
     if error is not None:
         log("Command error: " + error)
-        return error
+        return "error: "+error
     return output
 
 # Configure and connect to Wifi with ssid and password
@@ -44,6 +44,7 @@ def configureWifi(ssid, password):
         time.sleep(2)
     except:
         log("error during stop wifi")
+        return "error during stop wifi"
 
     # get actual wpa configurations and saved wifi
     arrayOfLine = []
@@ -73,6 +74,7 @@ def configureWifi(ssid, password):
         time.sleep(2)
     except:
         log("error during start wifi")
+        return "error during stop wifi"
 
 # remove static IP and enable dhcp
 def deleteStaticIP():
@@ -111,6 +113,8 @@ def deleteOldProfiles():
     os.system("sudo " + PATH + " rm *")
     listProfileVPN = "pivpn -l"
     output = sendBashCommand(listProfileVPN)
+    if "error" in output:
+        return output
     # parse output to get profiles names
     profiles = output.split("\n")
     for profile in profiles:
@@ -118,14 +122,18 @@ def deleteOldProfiles():
             profileName = profile[18:]
             # reinvoke profile
             delProfileVPN = "pivpn -r " + profileName
-            sendBashCommand(delProfileVPN)
+            output = sendBashCommand(delProfileVPN)
+            if "error" in output:
+                return output 
 
 # Add new profile to piVpn
 def addPiVpnProfile(profileName, profilePass):
     log(profileName)
     # addProfileVPN = "pivpn -a -n "+profileName+" -p "+profilePass
     addProfileVPN = "pivpn -a nopass -n " + profileName + " -d 1080"
-    sendBashCommand(addProfileVPN)
+    output = sendBashCommand(addProfileVPN)
+    if "error" in output:
+        return output
 
 # Generate new random password
 def randomPassGen(size=8, chars=string.ascii_letters + string.digits + string.punctuation):
@@ -135,6 +143,8 @@ def randomPassGen(size=8, chars=string.ascii_letters + string.digits + string.pu
 def addPortForwardingThenReturnPubicIP():
     addPortForwarding = "upnpc -r 443 tcp"
     output = sendBashCommand(addPortForwarding)
+    if "error" in output:
+        return output
 
     lines = output.split("\n")
     for line in lines:
@@ -239,7 +249,10 @@ def configureBox(client_sock):
                 log(hash)
 
                 runUpdate = "sudo python ~/protectMe-Server/update.py "+hash
-                sendBashCommand(runUpdate)
+                output = sendBashCommand(runUpdate)
+                if "error" in output:
+                    client_sock.sendall("error")
+
                 print "disconnected"
                 client_sock.close()
                 print "all done"
@@ -258,7 +271,9 @@ def configureBox(client_sock):
 
                 #   Configure WIFI and PIVPN ip static
                 log("Configure Wifi")
-                configureWifi(wifiName, wifiPass)
+                output = configureWifi(wifiName, wifiPass)
+                if "error" in output:
+                    client_sock.sendall("error")
                 log("Delete static IP")
                 deleteStaticIP()
                 time.sleep(15)
@@ -274,10 +289,14 @@ def configureBox(client_sock):
 
                 #  Delete old ovpnFiles and reinvoke olds profiles
                 log("Delete old ovpn profiles")
-                deleteOldProfiles()
+                output = deleteOldProfiles()
+                if "error" in output:
+                    client_sock.sendall("error")
 
             # 9.  Add Port forwarding and get public IP
             publicIp = addPortForwardingThenReturnPubicIP()
+            if "error" in publicIp:
+                client_sock.sendall("error")
 
             # 10. Create OpenVpn Profile
             now = datetime.now()
@@ -286,9 +305,9 @@ def configureBox(client_sock):
 
             ovpnPassword = randomPassGen()
             log("Adding profile")
-            addPiVpnProfile(profileName, ovpnPassword)
-            # opvnProfileNamePassword = "<auth-user-pass>\n"+profileName+"\n"+ovpnPassword+"\n</auth-user-pass>\n"
-            # opvnProfileNamePassword = "<auth-user-pass>\n"+"test"+"\n"+"test"+"\n</auth-user-pass>\n"
+            output = addPiVpnProfile(profileName, ovpnPassword)
+            if "error" in output:
+                client_sock.sendall("error")
 
             # 11. Get openVpn profile (.ovpn file)
             PATH = "/home/pi/ovpns/"
