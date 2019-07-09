@@ -152,15 +152,15 @@ def addPortForwardingThenReturnPubicIP():
 	if "ExternalIPAddress" in line:
 		fragments = line.split(" ")
 		ipPublic = fragments[2]
-	        log("External IP : " + ipPublic)
+	        log("External IP : /" + ipPublic+"/")
                 return ipPublic
 
 def modifyPublicIpOvpnProfile(profile, publicIp):
-    newProfile = " "
+    newProfile = ""
     lines = profile.split('\n')
     for line in lines :
 	if('443' in line):
-		line = "remote " + publicIp + " 443"
+		line = "remote " + str(publicIp) + " 443"
         newProfile = newProfile + line + '\n'
     return newProfile
 
