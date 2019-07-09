@@ -75,6 +75,7 @@ def configureWifi(ssid, password):
     except:
         log("error during start wifi")
         return "error during stop wifi"
+    return "ok"
 
 # remove static IP and enable dhcp
 def deleteStaticIP():
@@ -123,8 +124,9 @@ def deleteOldProfiles():
             # reinvoke profile
             delProfileVPN = "pivpn -r " + profileName
             output = sendBashCommand(delProfileVPN)
-            if "error" in output:
-                return output 
+            if("error" in output):
+                return output
+    return "ok"
 
 # Add new profile to piVpn
 def addPiVpnProfile(profileName, profilePass):
@@ -132,8 +134,7 @@ def addPiVpnProfile(profileName, profilePass):
     # addProfileVPN = "pivpn -a -n "+profileName+" -p "+profilePass
     addProfileVPN = "pivpn -a nopass -n " + profileName + " -d 1080"
     output = sendBashCommand(addProfileVPN)
-    if "error" in output:
-        return output
+    return output
 
 # Generate new random password
 def randomPassGen(size=8, chars=string.ascii_letters + string.digits + string.punctuation):
