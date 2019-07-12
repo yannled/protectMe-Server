@@ -88,16 +88,21 @@ def mainOnRaspFull():
     gitClone = "git clone https://github.com/yannled/protectMe-Update.git "+dataPath+"/protectMe-Update"
     sendBashCommand(gitClone)
     # get updateFile (.img) from reporitory git
-    updateFile = ""
+    updateFile = List()
     files = os.listdir(dataPath+"/protectMe-Update")
     for file in files:
         if ".img" in file:
-		updateFile=file
+		updateFile.append(file)
 
     # calcul hash of .img file (updateFile)
-    computeHash = "sha1sum "+dataPath+"/protectMe-Update/"+updateFile
-    resultHash = sendBashCommand(computeHash).split(" ")[0]
-    if(resultHash == hash):
+    fullHash = ""
+    for file in updateFile:
+        if(fullHash):
+            fullHash = fullHash+"_"
+        computeHash = "sha1sum "+dataPath+"/protectMe-Update/"+updateFile
+        resultHash = sendBashCommand(computeHash).split(" ")[0]
+        fullHash = fullHash + str(resultHash)
+    if(fullHash == hash):
         # backup network files in data partition
 	copyWpa_supplicantFile = "sudo cp /etc/wpa_supplicant/wpa_supplicant.conf "+dataPath+"/wpa_supplicant.conf"
 	sendBashCommand(copyWpa_supplicantFile)
@@ -130,7 +135,8 @@ def mainOnRaspLite():
                 updateFile=file
 
     # clone new image to Full partition
-    updatePartition = "sudo gunzip -c "+dataPath+"/protectMe-Update/"+updateFile+" | sudo dd of=/dev/"+raspPartition+raspFullNumber
+    simpleUpdateFileName = updateFile.split(".")[0]
+    updatePartition = "sudo cat "+dataPath+"/protectMe-Update/"+simpleUpdateFileName+".img.* | sudo gzip -dc | sudo dd of=/dev/"+raspPartition+raspFullNumber
     sendBashCommand(updatePartition)
 
     #change nummber partition for the current one
