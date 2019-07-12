@@ -361,7 +361,7 @@ def main():
                           profiles=[SERIAL_PORT_PROFILE]
                           )
 
-        log("Waiting for connection on RFCOMM channel : " + str(port))
+        print("Waiting for connection on RFCOMM channel : " + str(port))
         client_sock, client_info = server_sock.accept()
 
         log("Accepted connection from " + str(client_info))
