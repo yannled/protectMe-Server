@@ -246,10 +246,10 @@ def configureBox(client_sock):
             # if this is just an update we get the hash file then run update script
             if ("Update" in message):
                 log("Update: file Hash : " + plaintext)
-                hash = pattern.findall(plaintext)
+                hash = pattern.findall(plaintext)[0]
                 log(hash)
                 log("start update script")
-                runUpdate = "sudo python ~/protectMe-Server/update.py "+hash
+                runUpdate = "sudo python /home/pi/protectMe-Server/update.py "+hash+ " debug"
                 output = sendBashCommand(runUpdate)
                 if "error" in output:
                     client_sock.sendall("error")

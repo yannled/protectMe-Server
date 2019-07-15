@@ -85,23 +85,26 @@ def mainOnRaspFull():
     # mount Data partition
     mountOtherPartition(dataPath,raspPartition,raspDataNumber)
     # clone updates files in data partition
-    gitClone = "git clone https://github.com/yannled/protectMe-Update.git "+dataPath+"/protectMe-Update"
-    sendBashCommand(gitClone)
+    # normaly the following commands should allow us to recover the update files. Unfortunately, the solution used with Github
+    # does not allow us to properly store these files and recover them easily.
+   # getFiles = "wget -P /home/pi/ http://github.com/yannled/protectMe-Update/archive/tempUpdates.zip"
+   # gitClone = "git clone https://github.com/yannled/protectMe-Update.git "+dataPath+"/protectMe-Update"
+   # sendBashCommand(getFiles)
+   # unzipFiles = "unzip /homepi/tempUpdates.zip -d "+dataPath+"/protectMe-Update"
+   # sendBashCommand(unzipFiles)
+   # deleteTemp = "sudo rm /home/pi/tempUpdates.zip"
+   # sendBashCommand(deleteTemp)
     # get updateFile (.img) from reporitory git
-    updateFile = List()
+    updateFile = []
     files = os.listdir(dataPath+"/protectMe-Update")
     for file in files:
         if ".img" in file:
 		updateFile.append(file)
 
     # calcul hash of .img file (updateFile)
-    fullHash = ""
-    for file in updateFile:
-        if(fullHash):
-            fullHash = fullHash+"_"
-        computeHash = "sha1sum "+dataPath+"/protectMe-Update/"+updateFile
-        resultHash = sendBashCommand(computeHash).split(" ")[0]
-        fullHash = fullHash + str(resultHash)
+    fullHash =  ""
+    computeHash = "find " + dataPath+"/protectMe-Update/*.img* -type f -print0 | xargs -0 sha1sum | awk '{print $1}' | sha1sum | awk '{print $1}'"
+    fullHash = sendBashCommand(computeHash)
     if(fullHash == hash):
         # backup network files in data partition
 	copyWpa_supplicantFile = "sudo cp /etc/wpa_supplicant/wpa_supplicant.conf "+dataPath+"/wpa_supplicant.conf"
