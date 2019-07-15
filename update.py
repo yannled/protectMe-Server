@@ -60,7 +60,7 @@ def sendBashCommand(command):
 
 # this function change value of cmdline.txt file to boot to other partition
 def changeBootOptions(pathFile,partitionName, newPartitionNumber):
-    newContent = " "
+    newContent = ""
     filename = pathFile+"/cmdline.txt"
     with open(filename, "r") as infile:
         lines = infile.readlines()
@@ -122,8 +122,9 @@ def mainOnRaspFull():
         # change number partition for the other one
         changeBootOptions(otherPath,raspPartition,raspFullNumber)
 
-    reboot = "sudo reboot"
-    sendBashCommand(reboot)
+        reboot = "sudo reboot"
+        sendBashCommand(reboot)
+    log("Error Hash not same")
 
 # use this main if you are on the Lite Raspbian Partition
 def mainOnRaspLite():
