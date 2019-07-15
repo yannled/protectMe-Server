@@ -75,7 +75,7 @@ def changeBootOptions(pathFile,partitionName, newPartitionNumber):
 
 # this function will mount to other partition on /mnt/ to access cmdline file
 def mountOtherPartition(otherPath, raspPartition, otherPartNumberConf):
-    createFolder = "sudo mkdir " + otherPath
+    createFolder = "sudo mkdir -p " + otherPath
     mountPartition = "sudo mount -t auto /dev/" + raspPartition + otherPartNumberConf + " " +  otherPath
     sendBashCommand(createFolder)
     sendBashCommand(mountPartition)
