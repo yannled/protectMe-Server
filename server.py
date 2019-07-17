@@ -1,5 +1,11 @@
 #!/usr/bin/python
+# Auteur: Yann Lederrey
+# Cadre : Travail de Bachelor. Heig-VD, Sécurité de l'information
+# Projet : ProtectMe! VPN for everyone !
+# Github : https://github.com/yannled/protectMe-Server
 # source: rfcomm-server.py auth: Albert Huang <albert@csail.mit.edu> desc:
+# Explications : script du serveur Bluetooth à intégrer au Server ProtectMe! (V$
+
 
 from bluetooth import *
 import time

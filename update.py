@@ -1,7 +1,12 @@
 #!/usr/bin/python
-#swap number of the partition in cmdLine for both partition
-# the no current partition will be mount before modification
-# then when we restart we will boot on the other partition
+# Auteur: Yann Lederrey
+# Cadre : Travail de Bachelor. Heig-VD, Sécurité de l'information
+# Projet : ProtectMe! VPN for everyone !
+# Github : https://github.com/yannled/protectMe-Server
+# source: ---
+# Explications : script d'update appelé par le script du serveur Bluetooth
+# deux Main sont disponible, l'un doit être activé sur la partition Principal F$
+
 
 import subprocess
 import os
